@@ -13,7 +13,7 @@ enum Type {
 
 #[derive(Show, PartialEq)]
 struct Value {
-	typ:  usize,
+	typ:  Type,
 	value: ValueKnowledge,
 	pos: CodeReference
 }
@@ -49,7 +49,6 @@ struct BBlock {
 struct Function {
 	blocks: Vec<BBlock>,
 	values: Vec<Value>,
-	types: Vec<Type>,
 	type_params: Vec<String>
 }
 
@@ -63,12 +62,12 @@ fn infer_forward(func: &mut Function) -> Result<(), TypeError> {
 		for &(pos, ref op) in block.ops.iter() {
 			match op {
 				&Tuple(ref content) => {
-					func.types[func.values[pos].typ] = Record(None, match func.types[func.values[pos].typ] {
+					func.values[pos].typ = Record(None, match func.values[pos].typ {
 						Record(None, ref cont) => content.iter().zip(cont.iter()).map(
-							|&: (a, b)| superimpose(b, &func.types[func.values[*a].typ]).unwrap()
+							|&: (a, b)| superimpose(b, &func.values[*a].typ).unwrap()
 						).collect(),
 						Unknown(_) => content.iter().map(
-							|&: a| func.types[func.values[*a].typ].clone() ).collect(),
+							|&: a| func.values[*a].typ.clone() ).collect(),
 						_ => return Err(TypeError)
 					});
 				}
@@ -84,6 +83,7 @@ fn superimpose(a: &Type, b: &Type) -> Result<Type, TypeError> {
 	use Type::*;
 	match (a, b) {
 		(&Unknown(_), x) => Ok(x.clone()),
+		(x, &Unknown(_)) => Ok(x.clone()),
 		_ => if a == b {
 			Ok(b.clone())
 		} else {
@@ -99,12 +99,12 @@ fn infer_backward(func: &mut Function) -> Result<(), TypeError> {
 		for &(pos, ref op) in block.ops.iter().rev() {
 			match op {
 				&Tuple(ref content) => {
-					let cpy = match func.types[func.values[pos].typ] {
+					let cpy = match func.values[pos].typ {
 						Record(None, ref x) => x.clone(),
 						_ => panic!()
 					};
 					for (&idx, typ) in content.iter().zip(cpy.into_iter()) {
-						func.types[func.values[idx].typ] = superimpose(&func.types[func.values[idx].typ], &typ).unwrap();
+						func.types[func.values[idx].typ] = superimpose(&func.values[idx].typ, &typ).unwrap();
 					}
 				}
 				&Return(_) => {}
@@ -141,5 +141,5 @@ fn emptyfunc() {
 		} ],
 		types: vec![ Unknown(1) ],	// unit return value (inferred)
 		type_params: Vec::new()
-	}), Function { blocks: vec![BBlock { vars: HashMap::new(), ops: vec![(0, Tuple(Vec::new())), (1, Return(0))], goto: Goto::DeadEnd }], values: vec![Value { typ: 0, value: ValueKnowledge, pos: CodeReference }], types: vec![Record(None, vec![])], type_params: Vec::new() });
+	}), Function { blocks: vec![BBlock { vars: HashMap::new(), ops: vec![(0, Tuple(Vec::new())), (1, Return(0))], goto: Goto::DeadEnd }], values: vec![Value { typ: Record(None, vec![]), value: ValueKnowledge, pos: CodeReference }], type_params: Vec::new() });
 }
