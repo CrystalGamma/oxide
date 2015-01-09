@@ -104,13 +104,14 @@ fn infer_backward(func: &mut Function) -> Result<(), TypeError> {
 						_ => panic!()
 					};
 					for (&idx, typ) in content.iter().zip(cpy.into_iter()) {
-						func.types[func.values[idx].typ] = superimpose(&func.values[idx].typ, &typ).unwrap();
+						func.values[idx].typ = superimpose(&func.values[idx].typ, &typ).unwrap();
 					}
 				}
 				&Return(_) => {}
 				_ => unimplemented!()
 			}
 		}
+		// TODO: infer variables across blocks
 	}
 	Ok(())
 }
@@ -122,12 +123,12 @@ fn type_inference(mut func: Function) -> Function {
 	func
 }
 
+// single basic block functions
 #[test]
 fn emptyfunc() {
 	use Operation::*;
 	use Type::*;
-	assert_eq!(
-	type_inference(Function {
+	assert_eq!(type_inference(Function {
 		blocks: vec![ BBlock {
 			vars: HashMap::new(),	// no parameters
 			ops: vec![ (0, Tuple(Vec::new())),
@@ -135,11 +136,32 @@ fn emptyfunc() {
 			goto: Goto::DeadEnd
 		} ],
 		values: vec![ Value {
-			typ: 0,
+			typ: Unknown(1),	// unit return value (inferred)
 			value: ValueKnowledge,
 			pos: CodeReference
 		} ],
-		types: vec![ Unknown(1) ],	// unit return value (inferred)
 		type_params: Vec::new()
 	}), Function { blocks: vec![BBlock { vars: HashMap::new(), ops: vec![(0, Tuple(Vec::new())), (1, Return(0))], goto: Goto::DeadEnd }], values: vec![Value { typ: Record(None, vec![]), value: ValueKnowledge, pos: CodeReference }], type_params: Vec::new() });
+}
+
+#[test]
+fn dropfunc() {
+	use Operation::*;
+	use Type::*;
+	let mut param = HashMap::with_capacity(1);
+	param.insert("param".to_string(), 0);
+	assert_eq!(type_inference(Function {
+		blocks: vec![ BBlock {
+			vars: param.clone(),
+			ops: vec![ (0, Tuple(Vec::new())),
+				(1, Return(0)) ],	// return ()
+			goto: Goto::DeadEnd
+		} ],
+		values: vec![ Value {
+			typ: Unknown(2),	// unit return value (inferred)
+			value: ValueKnowledge,
+			pos: CodeReference
+		} ],
+		type_params: vec![ "Drop".to_string() ],
+	}), Function { blocks: vec![BBlock { vars: param, ops: vec![(0u, Tuple(Vec::new())), (1u, Return(0u32))], goto: DeadEnd }], values: vec![Value { typ: Record(None, Vec::new()), value: ValueKnowledge, pos: CodeReference }], type_params: vec!["Drop"] });
 }
